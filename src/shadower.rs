@@ -8,7 +8,7 @@ use kube::Resource;
 
 use tracing::{info, warn};
 
-pub async fn shadow<K, M>(resource: K, manager: &M) -> Result<()>
+pub async fn cast_shadow<K, M>(resource: K, manager: &M) -> Result<()>
 where
     K: kube::Resource<Scope = kube::core::NamespaceResourceScope> + Clone + serde::de::DeserializeOwned + serde::Serialize + std::fmt::Debug + Send + Sync + 'static,
     M: ResourceManager<K> + Sync,
@@ -19,7 +19,11 @@ where
     let namespaces = manager.list_namespaces().await?;
 
     let res = crate::utils::create_shadow(resource);
+    let mut created = 0;
+    let mut updated = 0;
+    let mut ignored = 0;
     for target_ns in namespaces {
+
         if target_ns == src_ns {
             continue;
         }
@@ -28,18 +32,23 @@ where
         let pot_shadow = manager.get_in_namespace(&target_ns, &name).await?;
         match pot_shadow {
             Some(s) if s.annotations().contains_key(crate::utils::SHADOW_KEY) => {
-                info!("Shadow of '{}/{}' already exists in namespace '{}'", src_ns, name, target_ns);
+                info!("Updating shadow '{}/{}' of '{}/{}'", target_ns, name, src_ns, name);
                 manager.update_in_namespace(&target_ns, &res).await?;
+                updated += 1;
             }
             Some(s) => {
-                warn!("{} '{}' in namespace '{}' exists but is no shadow", type_name_of_val(&s), name, target_ns);
+                warn!("{} '{}/{}' exists but is no shadow", type_name_of_val(&s), target_ns, name);
+                ignored += 1;
             }
             None => {
-                info!("Creating shadow of '{}/{}' in namespace '{}'", src_ns, name, target_ns);
+                info!("Creating shadow '{}/{}' of '{}/{}'", target_ns, name, src_ns, name);
                 manager.create_in_namespace(&target_ns, &res).await?;
+                created += 1;
             }
         }
     }
+
+    info!("Shadowing of '{}/{}' completed: {} created, {} updated, {} ignored", src_ns, name, created, updated, ignored);
     Ok(())
 }
 
@@ -52,6 +61,8 @@ where
     let name = resource.name_any();
     let src_ns = resource.namespace().unwrap_or_default();
     let namespaces = manager.list_namespaces().await?;
+    let mut deleted = 0;
+    let mut ignored = 0;
     for target_ns in namespaces {
         if target_ns == src_ns {
             continue;
@@ -61,17 +72,20 @@ where
         let pot_shadow = manager.get_in_namespace(&target_ns, &name).await?;
         match pot_shadow {
             Some(shadow) if shadow.annotations().contains_key(crate::utils::SHADOW_KEY) => {
-                info!("Deleting shadow of '{}/{}' in namespace '{}'", src_ns, name, target_ns);
+                info!("Deleting shadow '{}/{}' of '{}/{}'", target_ns, name, src_ns, name);
                 manager.delete_from_namespace(&target_ns, &name).await?;
+                deleted += 1;
             }
             Some(s) => {
-                info!("{} '{}' in namespace '{}' does not have the shadow annotation", type_name_of_val(&s), name, target_ns);
+                warn!("{} '{}/{}' exists but is no shadow", type_name_of_val(&s), target_ns, name);
+                ignored += 1;
             }
             _ => {
                 continue;
             }
         }
     }
+    info!("Shadow deletion of '{}/{}' completed: {} deleted, {} ignored", src_ns, name, deleted, ignored);
     Ok(())
 }
 
@@ -134,7 +148,7 @@ mod tests {
             .withf(move |ns, r| ns != "default" && r.name_any() == name)
             .returning(move |_, _| Ok(()));
 
-        shadow(cm, &mock).await.unwrap();
+        cast_shadow(cm, &mock).await.unwrap();
     }
 
     #[tokio::test]

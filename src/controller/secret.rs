@@ -20,7 +20,7 @@ pub async fn run(client: Client) -> anyhow::Result<()> {
         match event {
             Event::Apply(secret) if shadow_enabled(secret.meta()) => {
                 info!("Secret {} created or updated", secret.name_any());
-                shadower::shadow(secret, &mgr).await?;
+                shadower::cast_shadow(secret, &mgr).await?;
             }
             Event::Delete(secret) if shadow_enabled(secret.meta()) => {
                 info!("Secret {} deleted", secret.name_any());
