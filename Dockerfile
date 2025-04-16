@@ -8,7 +8,7 @@ WORKDIR /usr/src/sprouter
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir src && echo "fn main() {}" > src/main.rs
 RUN touch src/lib.rs
-RUN cargo build
+RUN cargo build --release
 RUN rm -rf src
 
 # Copy the real source
@@ -18,14 +18,12 @@ COPY src src
 RUN cargo build --release
 
 # Stage 2: Create minimal runtime image
-FROM debian:bookworm-slim
+FROM registry.suse.com/bci/bci-minimal:15.7
 
 # Copy compiled binary from builder
 COPY --from=builder /usr/src/sprouter/target/release/sprouter /usr/local/bin/sprouter
 
-
 # Run as non-root user (optional, recommended)
-RUN useradd -m suse
-USER suse
+USER 1001
 
 ENTRYPOINT ["/usr/local/bin/sprouter"]
