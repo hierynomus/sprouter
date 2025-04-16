@@ -1,0 +1,75 @@
+= 🌱 Sprouter
+
+Sprouter is a lightweight Kubernetes operator that automatically propagates annotated ConfigMaps and Secrets to every namespace in the cluster — creating "sprouts" from the original "seed".
+
+Sprouter is ideal for sharing common configuration across teams, environments, or tenants in a multi-namespace setup.
+
+== ✨ Features
+
+🖁️ Automatically syncs ConfigMaps and Secrets to all namespaces
+
+🧽 Cleans up propagated copies when the seed is deleted
+
+🚀 Propagates seeds to new namespaces upon creation
+
+🔍 Uses annotations to control propagation behavior
+
+♻️ Only updates when the Seed's data changes using content-based hashing
+
+== 🌿 How It Works
+
+Sprouter watches all ConfigMaps and Secrets.If a resource is annotated with:
+
+----
+metadata:
+  annotations:
+    sprouter.geeko.me/enabled: "true"
+----
+
+…it is considered a Seed. Sprouter then:
+
+- Copies it to every existing namespace.
+- Re-copies it if the source is updated.
+- Deletes all propagated copies if the source is deleted.
+
+Ensures the resource is automatically present in any new namespace created after.
+
+== 📆 Installation
+
+Coming soon: Helm chart, manifests, and container image instructions.
+
+== 🧪 Development
+
+Build locally: `cargo build`
+
+Run tests: `cargo test`
+
+Build Docker image: `docker build -t sprouter:latest .`
+
+== 🔐 Permissions (RBAC)
+
+Sprouter requires cluster-wide permissions to:
+
+- Read all ConfigMaps, Secrets, and Namespaces
+- Write to all namespaces
+
+== 📜 Annotation Format
+
+Sprouter only propagates resources annotated with:
+
+----
+shadower.geeko.me/enabled: "true"
+----
+
+== 🧠 Naming
+
+- Seed: the original annotated ConfigMap or Secret
+- Sprout: the copies created in each namespace
+- Sprouter: the operator casting those seeds across the cluster
+
+== 📜 License
+
+MIT (or Apache 2.0 — you choose)
+
+Built with 💚 in Rust, powered by kube-rs.
+

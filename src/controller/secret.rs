@@ -8,7 +8,7 @@ use kube::ResourceExt;
 use tracing::info;
 
 use crate::kubernetes::manager::KubeResourceManager;
-use crate::{shadower, utils::shadow_enabled};
+use crate::{grower, utils::is_seed};
 
 pub async fn run(client: Client) -> anyhow::Result<()> {
     let api: Api<Secret> = Api::all(client.clone());
@@ -18,13 +18,13 @@ pub async fn run(client: Client) -> anyhow::Result<()> {
     while let Some(event) = watcher.try_next().await? {
         let mgr = KubeResourceManager::<Secret>::new(client.clone());
         match event {
-            Event::Apply(secret) if shadow_enabled(secret.meta()) => {
+            Event::Apply(secret) if is_seed(secret.meta()) => {
                 info!("Secret {} created or updated", secret.name_any());
-                shadower::cast_shadow(secret, &mgr).await?;
+                grower::grow_sprouts(secret, &mgr).await?;
             }
-            Event::Delete(secret) if shadow_enabled(secret.meta()) => {
+            Event::Delete(secret) if is_seed(secret.meta()) => {
                 info!("Secret {} deleted", secret.name_any());
-                shadower::delete_shadows(secret, &mgr).await?;
+                grower::delete_sprouts(secret, &mgr).await?;
             }
             _ => {}
         }

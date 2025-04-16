@@ -1,13 +1,13 @@
 [package]
-name = "shadower"
+name = "sprouter"
 version = "0.1.0"
 edition = "2021"
-authors = ["Your Name <you@example.com>"]
-description = "A Kubernetes operator that shadows annotated ConfigMaps and Secrets to all namespaces."
-license = "MIT"
+authors = ["Jeroen van Erp <jeroen@geeko.me>"]
+description = "A Kubernetes operator that copies annotated ConfigMaps and Secrets to all namespaces."
+license = "MIT OR Apache-2.0"
 
 [lib]
-name = "shadower"
+name = "sprouter"
 path = "src/lib.rs"
 
 [dependencies]
@@ -22,6 +22,7 @@ futures = "0.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
 async-trait = "0.1"
+sha2 = "0.10.8"
 
 [dev-dependencies]
 rstest = "0.18"

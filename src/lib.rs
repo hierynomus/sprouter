@@ -1,5 +1,5 @@
-pub mod shadower;
+pub mod grower;
 pub mod utils;
 pub mod kubernetes;
 pub mod controller;
-pub mod shadow;
+pub mod sprout;

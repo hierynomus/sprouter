@@ -2,13 +2,13 @@
 FROM rust:1.86.0-slim AS builder
 
 # Create a new empty shell project
-WORKDIR /usr/src/shadower
+WORKDIR /usr/src/sprouter
 
 # Pre-copy manifest to cache dependencies
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir src && echo "fn main() {}" > src/main.rs
 RUN touch src/lib.rs
-RUN cargo build --release
+RUN cargo build
 RUN rm -rf src
 
 # Copy the real source
@@ -21,7 +21,7 @@ RUN cargo build --release
 FROM debian:bookworm-slim
 
 # Copy compiled binary from builder
-COPY --from=builder /usr/src/shadower/target/release/shadower /usr/local/bin/shadower
+COPY --from=builder /usr/src/sprouter/target/release/sprouter /usr/local/bin/sprouter
 
 
 # Run as non-root user (optional, recommended)
@@ -30,4 +30,4 @@ USER suse
 RUN mkdir -p /home/suse/.kube
 COPY rigel.yaml /home/suse/.kube/config
 
-ENTRYPOINT ["/usr/local/bin/shadower"]
+ENTRYPOINT ["/usr/local/bin/sprouter"]

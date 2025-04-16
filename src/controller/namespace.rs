@@ -7,9 +7,9 @@ use k8s_openapi::api::core::v1::Namespace;
 use kube::ResourceExt;
 use tracing::info;
 
-use crate::shadow::manager::ShadowManager;
+use crate::sprout::manager::SproutManager;
 
-pub async fn run(client: Client, shadow_manager: &ShadowManager) -> anyhow::Result<()> {
+pub async fn run(client: Client, sprout_manager: &SproutManager) -> anyhow::Result<()> {
     let ns_api: Api<Namespace> = Api::all(client.clone());
     let mut watcher = watcher(ns_api, WatcherConfig::default()).boxed();
     let mut seen = HashSet::new();
@@ -25,7 +25,7 @@ pub async fn run(client: Client, shadow_manager: &ShadowManager) -> anyhow::Resu
                         // Ensure the namespace is not already seen
                         if seen.insert(ns_name.clone()) {
                             info!("Namespace '{}' created or updated", ns_name);
-                            shadow_manager.new_namespace(&ns_name).await?;
+                            sprout_manager.new_namespace(&ns_name).await?;
                         }
                     }
                     _ => {
