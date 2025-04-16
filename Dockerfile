@@ -27,7 +27,5 @@ COPY --from=builder /usr/src/sprouter/target/release/sprouter /usr/local/bin/spr
 # Run as non-root user (optional, recommended)
 RUN useradd -m suse
 USER suse
-RUN mkdir -p /home/suse/.kube
-COPY rigel.yaml /home/suse/.kube/config
 
 ENTRYPOINT ["/usr/local/bin/sprouter"]
