@@ -1,14 +1,14 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "sprouter.name" . }}
+  name: {{ include "sprouter.fullname" . }}
   labels:
     {{- include "sprouter.labels" . | nindent 4 }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: {{ include "sprouter.name" . }}
+      app: {{ include "sprouter.fullname" . }}
   template:
     metadata:
       labels:

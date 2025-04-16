@@ -1,6 +1,7 @@
 apiVersion: v2
 name: sprouter
-version: 0.2.0
+version: 0.3.0
+appVersion: 0.3.0
 description: Propagates annotated ConfigMaps and Secrets across all namespaces
 maintainers:
   - name: hierynomus
