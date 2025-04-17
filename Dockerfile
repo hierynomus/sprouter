@@ -6,7 +6,9 @@ WORKDIR /usr/src/sprouter
 
 # Pre-copy manifest to cache dependencies
 COPY Cargo.toml Cargo.lock ./
-RUN cargo fetch
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release
+RUN rm -rf src
 COPY src src
 
 # Build for release

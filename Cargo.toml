@@ -6,10 +6,6 @@ authors = ["Jeroen van Erp <jeroen@geeko.me>"]
 description = "A Kubernetes operator that copies annotated ConfigMaps and Secrets to all namespaces."
 license = "MIT OR Apache-2.0"
 
-[lib]
-name = "sprouter"
-path = "src/lib.rs"
-
 [dependencies]
 anyhow = "1.0"
 kube = { version = "0.99.0", features = ["runtime", "derive"] }
