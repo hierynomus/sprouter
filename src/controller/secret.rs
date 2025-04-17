@@ -7,24 +7,32 @@ use kube::ResourceExt;
 
 use tracing::info;
 
-use crate::kubernetes::manager::KubeResourceManager;
-use crate::{grower, utils::is_seed};
+use crate::sprout;
+use crate::utils::is_seed;
 
-pub async fn run(client: Client) -> anyhow::Result<()> {
+pub async fn run(client: Client, sprout_manager: &sprout::manager::SproutManager) -> anyhow::Result<()> {
     let api: Api<Secret> = Api::all(client.clone());
     let mut watcher = watcher(api, WatcherConfig::default()).boxed();
 
     info!("Starting Secret watcher...");
     while let Some(event) = watcher.try_next().await? {
-        let mgr = KubeResourceManager::<Secret>::new(client.clone());
         match event {
-            Event::Apply(secret) if is_seed(secret.meta()) => {
-                info!("Secret {} created or updated", secret.name_any());
-                grower::grow_sprouts(secret, &mgr).await?;
+            Event::Apply(sec) if sprout_manager.is_known_seed(sec.clone()).await => {
+                if is_seed(sec.meta()) {
+                    info!("Secret '{}/{}' updated", sec.namespace().unwrap_or_default(), sec.name_any());
+                    sprout_manager.add_seed(sec.clone()).await?;
+                } else {
+                    info!("Secret '{}/{}' is known, but no longer seed, deleting", sec.namespace().unwrap_or_default(), sec.name_any());
+                    sprout_manager.delete_seed(sec.clone()).await?;
+                }
             }
-            Event::Delete(secret) if is_seed(secret.meta()) => {
-                info!("Secret {} deleted", secret.name_any());
-                grower::delete_sprouts(secret, &mgr).await?;
+            Event::Apply(sec) if is_seed(sec.meta()) => {
+                info!("Secret '{}/{}' created, growing sprouts", sec.namespace().unwrap_or_default(), sec.name_any());
+                sprout_manager.add_seed(sec.clone()).await?;
+            }
+            Event::Delete(sec) if is_seed(sec.meta()) => {
+                info!("Secret {} deleted", sec.name_any());
+                sprout_manager.delete_seed(sec.clone()).await?;
             }
             _ => {}
         }

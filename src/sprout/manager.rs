@@ -61,7 +61,7 @@ impl SproutManager {
         <K as kube::Resource>::DynamicType: Default,
     {
         info!("Growing sprouts for '{}/{}'", resource.namespace().unwrap_or_default(), resource.name_any());
-        let mut lock = self.seeds.write().await;
+        let mut lock: tokio::sync::RwLockWriteGuard<'_, HashSet<Seed>> = self.seeds.write().await;
         lock.insert(
             Seed {
                 name: resource.name_any(),

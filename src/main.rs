@@ -17,7 +17,7 @@ async fn main() -> anyhow::Result<()> {
 
     tokio::try_join!(
         configmap::run(client.clone(), &sprout_manager),
-        secret::run(client.clone()),
+        secret::run(client.clone(), &sprout_manager),
         namespace::run(client.clone(), &sprout_manager),
     )?;
 
