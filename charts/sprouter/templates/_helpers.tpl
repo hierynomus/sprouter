@@ -1,5 +1,6 @@
 {{- define "sprouter.labels" -}}
 app.kubernetes.io/name: {{ include "sprouter.fullname" . }}
+app: {{ include "sprouter.fullname" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | default .Chart.Version }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
