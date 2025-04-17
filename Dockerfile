@@ -1,17 +1,12 @@
 # Stage 1: Build the binary using the official Rust image
-FROM rust:1.86.0-slim AS builder
+FROM registry.suse.com/bci/rust:1.85 AS builder
 
 # Create a new empty shell project
 WORKDIR /usr/src/sprouter
 
 # Pre-copy manifest to cache dependencies
 COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN touch src/lib.rs
-RUN cargo build --release
-RUN rm -rf src
-
-# Copy the real source
+RUN cargo fetch
 COPY src src
 
 # Build for release
