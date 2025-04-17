@@ -4,7 +4,7 @@ global:
 image:
   registry: ghcr.io
   repository: hierynomus/sprouter
-  tag: v0.3.0
+  tag: 0.5.0
   pullPolicy: IfNotPresent
 
 
