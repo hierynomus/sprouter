@@ -5,22 +5,22 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | default .Chart.Version }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
-{{- define "sprouter.fullname" -}}
-{{- if .Values.fullnameOverride }}
-{{ .Values.fullnameOverride | trim | quote }}
-{{- else }}
-{{- if .Values.nameOverride }}
-{{ .Values.nameOverride | trim | quote }}
-{{- else }}
-{{ .Release.Name | trim | quote }}
-{{- end }}
-{{- end }}
-{{- end }}
+{{- define "sprouter.fullname" }}
+{{- if .Values.fullnameOverride -}}
+{{ .Values.fullnameOverride | trim -}}
+{{- else -}}
+{{- if .Values.nameOverride -}}
+{{ .Values.nameOverride | trim -}}
+{{- else -}}
+{{ .Release.Name | trim -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
 
 {{- define "sprouter.serviceAccountName" -}}
 {{- if .Values.serviceAccount.enabled -}}
-{{ include "sprouter.fullname" . }}-sa
+{{- include "sprouter.fullname" . }}
 {{- else -}}
-{{ .Values.serviceAccount.name | trim | quote }}
+{{ .Values.serviceAccount.name | trim }}
 {{- end -}}
 {{- end -}}

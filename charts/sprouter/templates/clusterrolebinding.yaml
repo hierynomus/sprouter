@@ -8,5 +8,5 @@ roleRef:
   name: {{ include "sprouter.serviceAccountName" . }}
 subjects:
   - kind: ServiceAccount
-    name: {{ include "sprouter.serviceAccountName" . }}}}
+    name: {{ include "sprouter.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
