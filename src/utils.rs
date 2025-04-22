@@ -37,11 +37,12 @@ where
     K: kube::Resource<Scope = kube::core::NamespaceResourceScope> + Clone,
 {
     let mut res = r.clone();
-    let val = format!("{}/{}", r.namespace().unwrap_or_default() , r.name_any());
+    let val = format!("{}/{}", r.namespace().unwrap_or_default(), r.name_any());
     res.annotations_mut().remove(ANNOTATION_KEY);
     res.annotations_mut().insert(SPROUT_KEY.to_string(), val);
     hash.as_ref().map(|h| {
-        res.annotations_mut().insert(SEED_HASH_KEY.to_string(), h.to_string());
+        res.annotations_mut()
+            .insert(SEED_HASH_KEY.to_string(), h.to_string());
     });
     res
 }
@@ -65,9 +66,10 @@ mod tests {
     #[test]
     fn test_is_seed_true() {
         let mut cm = ConfigMap::default();
-        cm.metadata.annotations = Some(BTreeMap::from([
-            (ANNOTATION_KEY.to_string(), "true".to_string()),
-        ]));
+        cm.metadata.annotations = Some(BTreeMap::from([(
+            ANNOTATION_KEY.to_string(),
+            "true".to_string(),
+        )]));
         assert!(is_seed(cm.meta()));
     }
 
@@ -80,18 +82,20 @@ mod tests {
     #[test]
     fn test_is_seed_false_wrong_value() {
         let mut cm = ConfigMap::default();
-        cm.metadata.annotations = Some(BTreeMap::from([
-            (ANNOTATION_KEY.to_string(), "false".to_string()),
-        ]));
+        cm.metadata.annotations = Some(BTreeMap::from([(
+            ANNOTATION_KEY.to_string(),
+            "false".to_string(),
+        )]));
         assert!(!is_seed(cm.meta()));
     }
 
     #[test]
     fn test_is_sprout_true() {
         let mut cm = ConfigMap::default();
-        cm.metadata.annotations = Some(BTreeMap::from([
-            (SPROUT_KEY.to_string(), "true".to_string()),
-        ]));
+        cm.metadata.annotations = Some(BTreeMap::from([(
+            SPROUT_KEY.to_string(),
+            "true".to_string(),
+        )]));
         assert!(is_sprout(cm.meta()));
     }
 

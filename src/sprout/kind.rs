@@ -38,7 +38,6 @@ impl AsSproutKind for ConfigMap {
             Some(hash_seed_data(&merged))
         }
     }
-
 }
 
 impl AsSproutKind for Secret {
@@ -48,10 +47,8 @@ impl AsSproutKind for Secret {
 
     fn hash(&self) -> Option<String> {
         self.data.as_ref().map(|data| {
-            let converted: BTreeMap<String, Vec<u8>> = data
-                .iter()
-                .map(|(k, v)| (k.clone(), v.0.clone()))
-                .collect();
+            let converted: BTreeMap<String, Vec<u8>> =
+                data.iter().map(|(k, v)| (k.clone(), v.0.clone())).collect();
             hash_seed_data(&converted)
         })
     }

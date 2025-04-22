@@ -1,13 +1,22 @@
-use kube::{Api, Client, api::{ListParams, PostParams, ResourceExt}};
-use k8s_openapi::api::core::v1::Namespace;
 use anyhow::Result;
+use k8s_openapi::api::core::v1::Namespace;
 use kube::core::NamespaceResourceScope;
+use kube::{
+    Api, Client,
+    api::{ListParams, PostParams, ResourceExt},
+};
 
 #[cfg_attr(test, mockall::automock)]
 #[async_trait::async_trait]
 pub trait ResourceManager<K>
 where
-    K: kube::Resource<Scope = NamespaceResourceScope> + Clone + serde::de::DeserializeOwned + serde::Serialize + std::fmt::Debug + Send + Sync,
+    K: kube::Resource<Scope = NamespaceResourceScope>
+        + Clone
+        + serde::de::DeserializeOwned
+        + serde::Serialize
+        + std::fmt::Debug
+        + Send
+        + Sync,
     <K as kube::Resource>::DynamicType: Default,
 {
     async fn list_namespaces(&self) -> Result<Vec<String>>;
@@ -19,7 +28,12 @@ where
 
 pub struct KubeResourceManager<K>
 where
-    K: kube::Resource<Scope = NamespaceResourceScope> + Clone + serde::de::DeserializeOwned + serde::Serialize + std::fmt::Debug + 'static,
+    K: kube::Resource<Scope = NamespaceResourceScope>
+        + Clone
+        + serde::de::DeserializeOwned
+        + serde::Serialize
+        + std::fmt::Debug
+        + 'static,
     <K as kube::Resource>::DynamicType: Default,
 {
     _marker: std::marker::PhantomData<K>,
@@ -28,13 +42,18 @@ where
 
 impl<K> KubeResourceManager<K>
 where
-    K: kube::Resource<Scope = NamespaceResourceScope> + Clone + serde::de::DeserializeOwned + serde::Serialize + std::fmt::Debug + 'static,
+    K: kube::Resource<Scope = NamespaceResourceScope>
+        + Clone
+        + serde::de::DeserializeOwned
+        + serde::Serialize
+        + std::fmt::Debug
+        + 'static,
     <K as kube::Resource>::DynamicType: Default,
 {
     pub fn new(client: Client) -> Self {
         Self {
             _marker: std::marker::PhantomData,
-            client
+            client,
         }
     }
 }
@@ -42,7 +61,14 @@ where
 #[async_trait::async_trait]
 impl<K> ResourceManager<K> for KubeResourceManager<K>
 where
-    K: kube::Resource<Scope = NamespaceResourceScope> + Clone + serde::de::DeserializeOwned + serde::Serialize + std::fmt::Debug + Send + Sync + 'static,
+    K: kube::Resource<Scope = NamespaceResourceScope>
+        + Clone
+        + serde::de::DeserializeOwned
+        + serde::Serialize
+        + std::fmt::Debug
+        + Send
+        + Sync
+        + 'static,
     <K as kube::Resource>::DynamicType: Default,
 {
     async fn list_namespaces(&self) -> Result<Vec<String>> {
@@ -76,7 +102,8 @@ where
         res.meta_mut().resource_version = None;
         res.meta_mut().uid = None;
 
-        api.replace(&res.name_any(), &PostParams::default(), &res).await?;
+        api.replace(&res.name_any(), &PostParams::default(), &res)
+            .await?;
         Ok(())
     }
 

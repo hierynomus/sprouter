@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 
-use kube::{Api, Client};
-use kube_runtime::watcher::{watcher, Event, Config as WatcherConfig};
 use futures::{StreamExt, TryStreamExt};
 use k8s_openapi::api::core::v1::Namespace;
 use kube::ResourceExt;
+use kube::{Api, Client};
+use kube_runtime::watcher::{Config as WatcherConfig, Event, watcher};
 use tracing::info;
 
 use crate::sprout::manager::SproutManager;
@@ -21,7 +21,6 @@ pub async fn run(client: Client, sprout_manager: &SproutManager) -> anyhow::Resu
                 let ns_name = ns.name_any();
                 match &ns.status {
                     Some(status) if status.phase == Some("Active".to_string()) => {
-
                         // Ensure the namespace is not already seen
                         if seen.insert(ns_name.clone()) {
                             info!("Namespace '{}' created or updated", ns_name);
