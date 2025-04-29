@@ -1,3 +1,5 @@
+// Copyright 2025, Jeroen van Erp <jeroen@geeko.me>
+// SPDX-License-Identifier: Apache-2.0
 use futures::{StreamExt, TryStreamExt};
 use k8s_openapi::api::core::v1::Secret;
 use kube::Resource;

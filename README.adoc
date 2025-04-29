@@ -36,7 +36,10 @@ Ensures the resource is automatically present in any new namespace created after
 
 == 📆 Installation
 
-Coming soon: Helm chart, manifests, and container image instructions.
+----
+helm install sprouter \
+  oci://ghcr.io/hierynomus/sprouter/charts/sprouter
+----
 
 == 🧪 Development
 
@@ -58,7 +61,7 @@ Sprouter requires cluster-wide permissions to:
 Sprouter only propagates resources annotated with:
 
 ----
-shadower.geeko.me/enabled: "true"
+sprouter.geeko.me/enabled: "true"
 ----
 
 == 🧠 Naming
@@ -69,7 +72,7 @@ shadower.geeko.me/enabled: "true"
 
 == 📜 License
 
-MIT (or Apache 2.0 — you choose)
+Apache 2.0
 
 Built with 💚 in Rust, powered by kube-rs.
 

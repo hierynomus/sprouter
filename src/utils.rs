@@ -1,3 +1,5 @@
+// Copyright 2025, Jeroen van Erp <jeroen@geeko.me>
+// SPDX-License-Identifier: Apache-2.0
 use std::collections::BTreeMap;
 
 use kube::api::ObjectMeta;

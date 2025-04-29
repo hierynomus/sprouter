@@ -1,3 +1,5 @@
+// Copyright 2025, Jeroen van Erp <jeroen@geeko.me>
+// SPDX-License-Identifier: Apache-2.0
 use k8s_openapi::api::core::v1::{ConfigMap, Secret};
 use std::{collections::BTreeMap, fmt};
 

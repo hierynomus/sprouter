@@ -1,3 +1,5 @@
+// Copyright 2025, Jeroen van Erp <jeroen@geeko.me>
+// SPDX-License-Identifier: Apache-2.0
 use tracing::info;
 
 use sprouter::controller::{configmap, namespace, secret};
