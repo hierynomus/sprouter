@@ -5,7 +5,7 @@ use k8s_openapi::api::core::v1::Namespace;
 use kube::core::NamespaceResourceScope;
 use kube::{
     Api, Client,
-    api::{ListParams, PostParams, ResourceExt},
+    api::{ListParams, Patch, PatchParams, PostParams, ResourceExt},
 };
 
 #[cfg_attr(test, mockall::automock)]
@@ -26,6 +26,8 @@ where
     async fn update_in_namespace(&self, ns: &str, resource: &K) -> Result<()>;
     async fn delete_from_namespace(&self, ns: &str, name: &str) -> Result<()>;
     async fn get_in_namespace(&self, ns: &str, name: &str) -> Result<Option<K>>;
+    async fn add_finalizer(&self, ns: &str, name: &str) -> Result<()>;
+    async fn remove_finalizer(&self, ns: &str, name: &str) -> Result<()>;
 }
 
 pub struct KubeResourceManager<K>
@@ -119,5 +121,34 @@ where
         let api: Api<K> = Api::namespaced(self.client.clone(), ns);
         let res = api.get_opt(name).await?;
         Ok(res)
+    }
+
+    async fn add_finalizer(&self, ns: &str, name: &str) -> Result<()> {
+        let api: Api<K> = Api::namespaced(self.client.clone(), ns);
+        let resource = api.get(name).await?;
+        let mut finalizers = resource.meta().finalizers.clone().unwrap_or_default();
+        if !finalizers.iter().any(|f| f == crate::utils::FINALIZER_KEY) {
+            finalizers.push(crate::utils::FINALIZER_KEY.to_string());
+            let patch = serde_json::json!({ "metadata": { "finalizers": finalizers } });
+            api.patch(name, &PatchParams::default(), &Patch::Merge(&patch)).await?;
+        }
+        Ok(())
+    }
+
+    async fn remove_finalizer(&self, ns: &str, name: &str) -> Result<()> {
+        let api: Api<K> = Api::namespaced(self.client.clone(), ns);
+        if let Some(resource) = api.get_opt(name).await? {
+            let finalizers: Vec<String> = resource
+                .meta()
+                .finalizers
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|f| f != crate::utils::FINALIZER_KEY)
+                .collect();
+            let patch = serde_json::json!({ "metadata": { "finalizers": finalizers } });
+            api.patch(name, &PatchParams::default(), &Patch::Merge(&patch)).await?;
+        }
+        Ok(())
     }
 }

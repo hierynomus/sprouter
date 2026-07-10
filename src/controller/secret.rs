@@ -10,7 +10,7 @@ use kube_runtime::watcher::{Config as WatcherConfig, Event, watcher};
 use tracing::info;
 
 use crate::sprout;
-use crate::utils::is_seed;
+use crate::utils::{has_finalizer, is_being_deleted, is_seed};
 
 pub async fn run(
     client: Client,
@@ -22,6 +22,14 @@ pub async fn run(
     info!("Starting Secret watcher...");
     while let Some(event) = watcher.try_next().await? {
         match event {
+            Event::Apply(sec) if is_being_deleted(sec.meta()) && has_finalizer(sec.meta()) => {
+                info!(
+                    "Secret '{}/{}' is terminating, cleaning up sprouts",
+                    sec.namespace().unwrap_or_default(),
+                    sec.name_any()
+                );
+                sprout_manager.delete_seed(sec.clone()).await?;
+            }
             Event::Apply(sec) if sprout_manager.is_known_seed(sec.clone()).await => {
                 if is_seed(sec.meta()) {
                     info!(

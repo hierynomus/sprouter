@@ -10,6 +10,7 @@ use sha2::Sha256;
 pub const ANNOTATION_KEY: &str = "sprouter.geeko.me/enabled";
 const SPROUT_KEY: &str = "sprouter.geeko.me/sprout-of";
 const SEED_HASH_KEY: &str = "sprouter.geeko.me/seed-hash";
+pub const FINALIZER_KEY: &str = "sprouter.geeko.me/finalizer";
 
 pub fn is_seed(meta: &ObjectMeta) -> bool {
     meta.annotations
@@ -32,6 +33,17 @@ pub fn is_sprout_recent(meta: &ObjectMeta, hash: &Option<String>) -> bool {
         .and_then(|a| a.get(SEED_HASH_KEY))
         .map(|v| v == hash.as_deref().unwrap_or_default())
         .unwrap_or(false)
+}
+
+pub fn has_finalizer(meta: &ObjectMeta) -> bool {
+    meta.finalizers
+        .as_ref()
+        .map(|f| f.iter().any(|s| s == FINALIZER_KEY))
+        .unwrap_or(false)
+}
+
+pub fn is_being_deleted(meta: &ObjectMeta) -> bool {
+    meta.deletion_timestamp.is_some()
 }
 
 pub fn create_sprout<K>(r: K, hash: &Option<String>) -> K
@@ -131,5 +143,40 @@ mod tests {
     fn test_is_sprout_recent_false_no_annotation() {
         let cm = ConfigMap::default();
         assert!(!is_sprout_recent(cm.meta(), &None));
+    }
+
+    #[test]
+    fn test_has_finalizer_true() {
+        let mut cm = ConfigMap::default();
+        cm.metadata.finalizers = Some(vec![FINALIZER_KEY.to_string()]);
+        assert!(has_finalizer(cm.meta()));
+    }
+
+    #[test]
+    fn test_has_finalizer_false_empty() {
+        let cm = ConfigMap::default();
+        assert!(!has_finalizer(cm.meta()));
+    }
+
+    #[test]
+    fn test_has_finalizer_false_other_finalizer() {
+        let mut cm = ConfigMap::default();
+        cm.metadata.finalizers = Some(vec!["other.io/finalizer".to_string()]);
+        assert!(!has_finalizer(cm.meta()));
+    }
+
+    #[test]
+    fn test_is_being_deleted_true() {
+        let meta: kube::api::ObjectMeta = serde_json::from_value(serde_json::json!({
+            "deletionTimestamp": "2024-01-01T00:00:00Z"
+        }))
+        .unwrap();
+        assert!(is_being_deleted(&meta));
+    }
+
+    #[test]
+    fn test_is_being_deleted_false() {
+        let cm = ConfigMap::default();
+        assert!(!is_being_deleted(cm.meta()));
     }
 }

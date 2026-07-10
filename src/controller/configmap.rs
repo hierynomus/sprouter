@@ -10,7 +10,7 @@ use kube_runtime::watcher::{Config as WatcherConfig, Event, watcher};
 use tracing::info;
 
 use crate::sprout::manager::SproutManager;
-use crate::utils::is_seed;
+use crate::utils::{has_finalizer, is_being_deleted, is_seed};
 
 pub async fn run(client: Client, sprout_manager: &SproutManager) -> anyhow::Result<()> {
     let api: Api<ConfigMap> = Api::all(client.clone());
@@ -19,6 +19,14 @@ pub async fn run(client: Client, sprout_manager: &SproutManager) -> anyhow::Resu
     info!("Starting ConfigMap watcher...");
     while let Some(event) = watcher.try_next().await? {
         match event {
+            Event::Apply(cm) if is_being_deleted(cm.meta()) && has_finalizer(cm.meta()) => {
+                info!(
+                    "ConfigMap '{}/{}' is terminating, cleaning up sprouts",
+                    cm.namespace().unwrap_or_default(),
+                    cm.name_any()
+                );
+                sprout_manager.delete_seed(cm.clone()).await?;
+            }
             Event::Apply(cm) if sprout_manager.is_known_seed(cm.clone()).await => {
                 if is_seed(cm.meta()) {
                     info!(

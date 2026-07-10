@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 use std::collections::HashSet;
 
-use crate::utils::is_seed;
+use crate::utils::{is_being_deleted, is_seed};
 use crate::{
     grower::{delete_sprouts, grow_sprouts},
     kubernetes::manager::{KubeResourceManager, ResourceManager},
@@ -66,7 +66,11 @@ impl SproutManager {
         let pot_seeds = api.list(&ListParams::default()).await?;
         for pot_seed in pot_seeds {
             if is_seed(pot_seed.meta()) {
-                self.add_seed(pot_seed).await?;
+                if is_being_deleted(pot_seed.meta()) {
+                    self.delete_seed(pot_seed).await?;
+                } else {
+                    self.add_seed(pot_seed).await?;
+                }
             }
         }
         Ok(())
@@ -98,6 +102,9 @@ impl SproutManager {
         });
         let mgr = KubeResourceManager::<K>::new(self.client.clone());
         grow_sprouts(resource.clone(), &mgr).await?;
+        let ns = resource.namespace().unwrap_or_default();
+        let name = resource.name_any();
+        mgr.add_finalizer(&ns, &name).await?;
         Ok(())
     }
 
@@ -127,6 +134,9 @@ impl SproutManager {
         });
         let mgr = KubeResourceManager::<K>::new(self.client.clone());
         delete_sprouts(resource.clone(), &mgr).await?;
+        let ns = resource.namespace().unwrap_or_default();
+        let name = resource.name_any();
+        mgr.remove_finalizer(&ns, &name).await?;
         Ok(())
     }
 
