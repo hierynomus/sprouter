@@ -1,5 +1,6 @@
-# Stage 1: Build the binary using the official Rust image
-FROM registry.suse.com/bci/rust:1.85 AS builder
+# Stage 1: Build the binary
+# using the SUSE Application Collection Rust image
+FROM registry.suse.com/bci/rust:1.97 AS builder
 
 # Create a new empty shell project
 WORKDIR /usr/src/sprouter
@@ -15,7 +16,8 @@ COPY src src
 RUN cargo build --release
 
 # Stage 2: Create minimal runtime image
-FROM registry.suse.com/bci/bci-minimal:15.7
+# using the SUSE Application Collection BCI Micro image
+FROM registry.suse.com/bci/bci-nano:16.0
 
 # Copy compiled binary from builder
 COPY --from=builder /usr/src/sprouter/target/release/sprouter /usr/local/bin/sprouter
