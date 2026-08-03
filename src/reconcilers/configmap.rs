@@ -3,10 +3,9 @@
 
 //! ConfigMap seed reconciler - watches ConfigMaps and propagates those marked as seeds.
 
-use crate::grower::{delete_sprouts, grow_sprouts};
-use crate::kubernetes::manager::{KubeResourceManager, ResourceManager};
 use crate::sprout::manager::SproutManager;
 use crate::utils::{has_finalizer, is_being_deleted, is_seed};
+use async_trait::async_trait;
 use futures::StreamExt;
 use k8s_openapi::api::core::v1::ConfigMap;
 use kube::runtime::{controller::Action, Controller};
@@ -25,9 +24,27 @@ pub enum ConfigMapReconcileError {
     Other(#[from] anyhow::Error),
 }
 
+#[cfg_attr(test, mockall::automock)]
+#[async_trait]
+trait ConfigMapSeedLifecycle: Send + Sync {
+    async fn add_seed(&self, resource: ConfigMap) -> anyhow::Result<()>;
+    async fn delete_seed(&self, resource: ConfigMap) -> anyhow::Result<()>;
+}
+
+#[async_trait]
+impl ConfigMapSeedLifecycle for SproutManager {
+    async fn add_seed(&self, resource: ConfigMap) -> anyhow::Result<()> {
+        SproutManager::add_seed(self, resource).await
+    }
+
+    async fn delete_seed(&self, resource: ConfigMap) -> anyhow::Result<()> {
+        SproutManager::delete_seed(self, resource).await
+    }
+}
+
 pub struct ConfigMapSeedReconciler {
     client: Client,
-    sprout_manager: Arc<SproutManager>,
+    sprout_manager: Arc<dyn ConfigMapSeedLifecycle>,
 }
 
 impl ConfigMapSeedReconciler {
@@ -60,6 +77,13 @@ async fn reconcile(
     cm: Arc<ConfigMap>,
     ctx: Arc<ConfigMapSeedReconciler>,
 ) -> Result<Action, ConfigMapReconcileError> {
+    reconcile_with_lifecycle(cm, ctx.sprout_manager.as_ref()).await
+}
+
+async fn reconcile_with_lifecycle(
+    cm: Arc<ConfigMap>,
+    seed_lifecycle: &dyn ConfigMapSeedLifecycle,
+) -> Result<Action, ConfigMapReconcileError> {
     let name = cm.name_any();
     let namespace = cm.namespace().unwrap_or_default();
     let meta = &(*cm).metadata;
@@ -69,9 +93,7 @@ async fn reconcile(
     // If being deleted, clean up sprouts and remove finalizer
     if is_being_deleted(meta) && has_finalizer(meta) {
         debug!("ConfigMap {}/{} is being deleted", namespace, name);
-        let mgr = KubeResourceManager::<ConfigMap>::new(ctx.client.clone());
-        let _ = delete_sprouts((*cm).clone(), &mgr).await;
-        mgr.remove_finalizer(&namespace, &name).await?;
+        seed_lifecycle.delete_seed((*cm).clone()).await?;
         return Ok(Action::await_change());
     }
 
@@ -86,15 +108,11 @@ async fn reconcile(
 
     // If not being deleted but doesn't have finalizer, add it
     if !is_being_deleted(meta) && !has_finalizer(meta) {
-        debug!("Adding finalizer to seed configmap {}/{}", namespace, name);
-        let mgr = KubeResourceManager::<ConfigMap>::new(ctx.client.clone());
-        mgr.add_finalizer(&namespace, &name).await?;
+        debug!("Adding seed configmap {}/{}", namespace, name);
     }
 
-    // This is a seed resource - grow sprouts
-    debug!("Growing sprouts for seed configmap {}/{}", namespace, name);
-    let mgr = KubeResourceManager::<ConfigMap>::new(ctx.client.clone());
-    let _ = grow_sprouts((*cm).clone(), &mgr).await;
+    // Keep SproutManager seed index in sync and handle finalizer/sprout propagation.
+    seed_lifecycle.add_seed((*cm).clone()).await?;
 
     Ok(Action::await_change())
 }
@@ -111,4 +129,78 @@ fn error_policy(
         error
     );
     Action::requeue(Duration::from_secs(60))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use k8s_openapi::api::core::v1::ConfigMap;
+    use serde_json::json;
+
+    fn make_configmap(seed: bool, deleting: bool, with_finalizer: bool) -> Arc<ConfigMap> {
+        let mut metadata = json!({
+            "name": "seed-cm",
+            "namespace": "default"
+        });
+
+        if seed {
+            metadata["annotations"] = json!({
+                "sprouter.geeko.me/enabled": "true"
+            });
+        }
+
+        if deleting {
+            metadata["deletionTimestamp"] = json!("2026-01-01T00:00:00Z");
+        }
+
+        if with_finalizer {
+            metadata["finalizers"] = json!(["sprouter.geeko.me/finalizer"]);
+        }
+
+        Arc::new(
+            serde_json::from_value(json!({
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": metadata,
+                "data": {}
+            }))
+            .expect("valid ConfigMap JSON"),
+        )
+    }
+
+    #[tokio::test]
+    async fn reconcile_seed_calls_add_seed() {
+        let mut lifecycle = MockConfigMapSeedLifecycle::new();
+        lifecycle.expect_add_seed().times(1).returning(|_| Ok(()));
+        lifecycle.expect_delete_seed().times(0);
+
+        let cm = make_configmap(true, false, false);
+        let result = reconcile_with_lifecycle(cm, &lifecycle).await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn reconcile_terminating_seed_calls_delete_seed() {
+        let mut lifecycle = MockConfigMapSeedLifecycle::new();
+        lifecycle.expect_delete_seed().times(1).returning(|_| Ok(()));
+        lifecycle.expect_add_seed().times(0);
+
+        let cm = make_configmap(true, true, true);
+        let result = reconcile_with_lifecycle(cm, &lifecycle).await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn reconcile_non_seed_does_not_call_seed_lifecycle() {
+        let mut lifecycle = MockConfigMapSeedLifecycle::new();
+        lifecycle.expect_add_seed().times(0);
+        lifecycle.expect_delete_seed().times(0);
+
+        let cm = make_configmap(false, false, false);
+        let result = reconcile_with_lifecycle(cm, &lifecycle).await;
+
+        assert!(result.is_ok());
+    }
 }
