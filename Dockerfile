@@ -1,6 +1,6 @@
 # Create minimal runtime image
 # using the SUSE Application Collection BCI Micro image
-FROM registry.suse.com/bci/bci-micro:16.0
+FROM registry.suse.com/bci/bci-minimal:16.0
 
 ARG TARGETARCH
 
