@@ -164,6 +164,14 @@ impl SproutManager {
         })
     }
 
+    fn should_sprout_to_namespace(
+        config: &SprouterConfig,
+        seed_namespace: &str,
+        target_namespace: &str,
+    ) -> bool {
+        seed_namespace != target_namespace && !config.is_namespace_excluded(target_namespace)
+    }
+
     pub async fn new_namespace(&self, namespace: &str) -> Result<()> {
         if self.config.is_namespace_excluded(namespace) {
             info!(
@@ -176,7 +184,7 @@ impl SproutManager {
         let lock = self.seeds.read().await;
 
         for seed in lock.iter() {
-            if seed.namespace == namespace {
+            if !Self::should_sprout_to_namespace(&self.config, &seed.namespace, namespace) {
                 continue;
             }
             info!(
@@ -207,5 +215,37 @@ impl SproutManager {
 
         info!("All known seeds sprouted in new namespace '{}'", namespace);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_sprout_to_namespace_skips_source_namespace() {
+        let config = SprouterConfig::default();
+
+        assert!(!SproutManager::should_sprout_to_namespace(
+            &config, "source", "source"
+        ));
+    }
+
+    #[test]
+    fn should_sprout_to_namespace_skips_excluded_namespace() {
+        let config = SprouterConfig::from_excluded_namespaces_env("excluded");
+
+        assert!(!SproutManager::should_sprout_to_namespace(
+            &config, "source", "excluded"
+        ));
+    }
+
+    #[test]
+    fn should_sprout_to_namespace_allows_other_namespace() {
+        let config = SprouterConfig::from_excluded_namespaces_env("excluded");
+
+        assert!(SproutManager::should_sprout_to_namespace(
+            &config, "source", "target"
+        ));
     }
 }

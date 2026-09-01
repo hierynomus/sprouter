@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 use std::sync::Arc;
 
+use chrono::Utc;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
 use tracing::info;
 
 use sprouter::config::SprouterConfig;
@@ -15,6 +17,7 @@ async fn main() -> anyhow::Result<()> {
 
     let client = kube::Client::try_default().await?;
     let config = SprouterConfig::from_env();
+    let started_at = Time(Utc::now());
 
     // Initialize the SproutManager
     let sprout_manager = Arc::new(SproutManager::new(client.clone(), config));
@@ -24,7 +27,7 @@ async fn main() -> anyhow::Result<()> {
     // Create and run reconcilers
     let configmap_reconciler = ConfigMapSeedReconciler::new(client.clone(), sprout_manager.clone());
     let secret_reconciler = SecretSeedReconciler::new(client.clone(), sprout_manager.clone());
-    let namespace_reconciler = NamespaceReconciler::new(client, sprout_manager);
+    let namespace_reconciler = NamespaceReconciler::new(client, sprout_manager, started_at);
 
     tokio::try_join!(
         configmap_reconciler.run(),

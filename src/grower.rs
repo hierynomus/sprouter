@@ -287,6 +287,32 @@ mod tests {
         grow_sprouts(seed, &mock, &config).await.unwrap();
     }
 
+    #[tokio::test]
+    async fn grow_skips_excluded_namespace_but_still_processes_allowed_namespace() {
+        let seed = seed_cm("cfg", "src");
+        let config = SprouterConfig::from_excluded_namespaces_env("excluded");
+        let mut mock = MockResourceManager::<ConfigMap>::new();
+        mock.expect_list_namespaces().once().returning(|| {
+            Ok(vec![
+                "src".to_string(),
+                "excluded".to_string(),
+                "allowed".to_string(),
+            ])
+        });
+        mock.expect_get_in_namespace()
+            .withf(|namespace, name| namespace == "allowed" && name == "cfg")
+            .once()
+            .returning(|_, _| Ok(None));
+        mock.expect_create_in_namespace()
+            .withf(|namespace, resource| {
+                namespace == "allowed" && resource.metadata.name.as_deref() == Some("cfg")
+            })
+            .once()
+            .returning(|_, _| Ok(()));
+
+        grow_sprouts(seed, &mock, &config).await.unwrap();
+    }
+
     // ── delete_sprouts ────────────────────────────────────────────────────────
 
     #[tokio::test]
@@ -331,6 +357,26 @@ mod tests {
             .once()
             .returning(move |_, _| Ok(Some(other.clone())));
         // Resource is not ours — delete should not be called.
+
+        delete_sprouts(seed, &mock).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn delete_still_removes_sprout_from_excluded_namespace_name() {
+        let seed = seed_cm("cfg", "src");
+        let sprout = up_to_date_sprout(&seed);
+        let mut mock = MockResourceManager::<ConfigMap>::new();
+        mock.expect_list_namespaces()
+            .once()
+            .returning(|| Ok(vec!["src".to_string(), "excluded".to_string()]));
+        mock.expect_get_in_namespace()
+            .withf(|namespace, name| namespace == "excluded" && name == "cfg")
+            .once()
+            .returning(move |_, _| Ok(Some(sprout.clone())));
+        mock.expect_delete_from_namespace()
+            .withf(|namespace, name| namespace == "excluded" && name == "cfg")
+            .once()
+            .returning(|_, _| Ok(()));
 
         delete_sprouts(seed, &mock).await.unwrap();
     }
