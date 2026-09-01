@@ -162,3 +162,11 @@ jobs:
         run: |
           helm package ./charts/sprouter --version ${{ steps.get-version.outputs.VERSION }}
           helm push ./sprouter-${{ steps.get-version.outputs.VERSION }}.tgz oci://${{ steps.get-version.outputs.REPOSITORY }}/charts
+
+      - name: Publish GitHub Release
+        uses: release-drafter/release-drafter@v6
+        with:
+          publish: true
+          tag: ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

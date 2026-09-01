@@ -1,0 +1,20 @@
+dependencies:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'mise.toml'
+
+infrastructure:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/**'
+
+documentation:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'README.adoc'
+      - 'CONTRIBUTORS'
+      - 'NOTICE'
+      - 'LICENSE'
+      - 'LICENSE_HEADER'
