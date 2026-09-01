@@ -3,6 +3,7 @@
 use std::any::type_name_of_val;
 
 use crate::{
+    config::SprouterConfig,
     kubernetes::manager::ResourceManager,
     sprout::kind::AsSproutKind,
     utils::{is_sprout, is_sprout_recent},
@@ -12,7 +13,7 @@ use kube::api::ResourceExt;
 
 use tracing::{info, warn};
 
-pub async fn grow_sprouts<K, M>(resource: K, manager: &M) -> Result<()>
+pub async fn grow_sprouts<K, M>(resource: K, manager: &M, config: &SprouterConfig) -> Result<()>
 where
     K: kube::Resource<Scope = kube::core::NamespaceResourceScope>
         + Clone
@@ -37,6 +38,14 @@ where
     let mut validated = 0;
     for target_ns in namespaces {
         if target_ns == src_ns {
+            continue;
+        }
+
+        if config.is_namespace_excluded(&target_ns) {
+            info!(
+                "Namespace '{}' is excluded, skipping sprout creation",
+                target_ns
+            );
             continue;
         }
 
@@ -139,6 +148,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::SprouterConfig;
     use crate::kubernetes::manager::MockResourceManager;
     use crate::sprout::kind::AsSproutKind;
     use k8s_openapi::api::core::v1::ConfigMap;
@@ -170,6 +180,10 @@ mod tests {
         cm
     }
 
+    fn config_without_exclusions() -> SprouterConfig {
+        SprouterConfig::default()
+    }
+
     // ── grow_sprouts ──────────────────────────────────────────────────────────
 
     #[tokio::test]
@@ -186,7 +200,9 @@ mod tests {
             .once()
             .returning(|_, _| Ok(()));
 
-        grow_sprouts(seed, &mock).await.unwrap();
+        grow_sprouts(seed, &mock, &config_without_exclusions())
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -198,7 +214,9 @@ mod tests {
             .once()
             .returning(|| Ok(vec!["src".to_string()]));
 
-        grow_sprouts(seed, &mock).await.unwrap();
+        grow_sprouts(seed, &mock, &config_without_exclusions())
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -216,7 +234,9 @@ mod tests {
             .once()
             .returning(|_, _| Ok(()));
 
-        grow_sprouts(seed, &mock).await.unwrap();
+        grow_sprouts(seed, &mock, &config_without_exclusions())
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -232,7 +252,9 @@ mod tests {
             .returning(move |_, _| Ok(Some(current.clone())));
         // No create or update should be called.
 
-        grow_sprouts(seed, &mock).await.unwrap();
+        grow_sprouts(seed, &mock, &config_without_exclusions())
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -248,7 +270,21 @@ mod tests {
             .returning(move |_, _| Ok(Some(other.clone())));
         // Resource exists but has no sprout annotation — should not create or update.
 
-        grow_sprouts(seed, &mock).await.unwrap();
+        grow_sprouts(seed, &mock, &config_without_exclusions())
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn grow_skips_excluded_namespace() {
+        let seed = seed_cm("cfg", "src");
+        let config = SprouterConfig::from_excluded_namespaces_env("excluded");
+        let mut mock = MockResourceManager::<ConfigMap>::new();
+        mock.expect_list_namespaces()
+            .once()
+            .returning(|| Ok(vec!["src".to_string(), "excluded".to_string()]));
+
+        grow_sprouts(seed, &mock, &config).await.unwrap();
     }
 
     // ── delete_sprouts ────────────────────────────────────────────────────────

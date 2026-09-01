@@ -3,6 +3,7 @@
 A Helm chart to deploy **Sprouter**, a Kubernetes operator that propagates annotated `ConfigMaps` and `Secrets` across all namespaces.
 
 ## 🧪 Features
+
 - Automatically propagates resources with the annotation `sprouter.geeko.me/enabled: true`
 - Adds a hash annotation to detect changes and prevent unnecessary updates
 - Cleans up sprouts when the seed is deleted
@@ -27,16 +28,17 @@ helm install sprouter ./charts/sprouter
 
 ## 🔧 Configuration
 
-| Key | Description | Default |
-|-----|-------------|---------|
-| `image.registry` | Container registry | `ghcr.io` |
-| `image.repository` | Image repository | `YOUR_USER/sprouter` |
-| `image.tag` | Image tag | `latest` |
-| `image.pullPolicy` | Image pull policy | `IfNotPresent` |
-| `global.pullSecrets` | ImagePullSecrets to use | `[]` |
-| `global.imageRegistry` | Overrides `.image.registry` globally | `""` |
-| `fullnameOverride` | Overrides the full resource name | `""` |
-| `resources.requests` / `limits` | CPU & memory settings | See `values.yaml` |
+| Key                             | Description                                       | Default              |
+| ------------------------------- | ------------------------------------------------- | -------------------- |
+| `image.registry`                | Container registry                                | `ghcr.io`            |
+| `image.repository`              | Image repository                                  | `YOUR_USER/sprouter` |
+| `image.tag`                     | Image tag                                         | `latest`             |
+| `image.pullPolicy`              | Image pull policy                                 | `IfNotPresent`       |
+| `global.pullSecrets`            | ImagePullSecrets to use                           | `[]`                 |
+| `global.imageRegistry`          | Overrides `.image.registry` globally              | `""`                 |
+| `excludedNamespaces`            | Namespaces that Sprouter will not copy seeds into | `[]`                 |
+| `fullnameOverride`              | Overrides the full resource name                  | `""`                 |
+| `resources.requests` / `limits` | CPU & memory settings                             | See `values.yaml`    |
 
 ---
 
@@ -55,10 +57,20 @@ data:
 
 This ConfigMap will be automatically replicated to every namespace.
 
+To exclude namespaces from copy targets:
+
+```yaml
+excludedNamespaces:
+  - kube-system
+  - kube-public
+```
+
 ---
 
 ## 🔐 RBAC
+
 This chart creates the following Kubernetes resources:
+
 - ServiceAccount
 - ClusterRole with scoped permissions
 - ClusterRoleBinding
@@ -74,4 +86,5 @@ helm uninstall sprouter
 ---
 
 ## 👷 Maintainers
+
 - @hierynomus

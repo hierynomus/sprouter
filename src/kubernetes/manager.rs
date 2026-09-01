@@ -4,8 +4,8 @@ use anyhow::Result;
 use k8s_openapi::api::core::v1::Namespace;
 use kube::core::NamespaceResourceScope;
 use kube::{
-    Api, Client,
     api::{ListParams, Patch, PatchParams, PostParams, ResourceExt},
+    Api, Client,
 };
 
 #[cfg_attr(test, mockall::automock)]
@@ -130,7 +130,8 @@ where
         if !finalizers.iter().any(|f| f == crate::utils::FINALIZER_KEY) {
             finalizers.push(crate::utils::FINALIZER_KEY.to_string());
             let patch = serde_json::json!({ "metadata": { "finalizers": finalizers } });
-            api.patch(name, &PatchParams::default(), &Patch::Merge(&patch)).await?;
+            api.patch(name, &PatchParams::default(), &Patch::Merge(&patch))
+                .await?;
         }
         Ok(())
     }
@@ -147,7 +148,8 @@ where
                 .filter(|f| f != crate::utils::FINALIZER_KEY)
                 .collect();
             let patch = serde_json::json!({ "metadata": { "finalizers": finalizers } });
-            api.patch(name, &PatchParams::default(), &Patch::Merge(&patch)).await?;
+            api.patch(name, &PatchParams::default(), &Patch::Merge(&patch))
+                .await?;
         }
         Ok(())
     }
