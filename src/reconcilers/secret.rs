@@ -184,7 +184,10 @@ mod tests {
     #[tokio::test]
     async fn reconcile_terminating_seed_calls_delete_seed() {
         let mut lifecycle = MockSecretSeedLifecycle::new();
-        lifecycle.expect_delete_seed().times(1).returning(|_| Ok(()));
+        lifecycle
+            .expect_delete_seed()
+            .times(1)
+            .returning(|_| Ok(()));
         lifecycle.expect_add_seed().times(0);
 
         let secret = make_secret(true, true, true);

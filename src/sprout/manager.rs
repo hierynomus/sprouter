@@ -2,19 +2,20 @@
 // SPDX-License-Identifier: Apache-2.0
 use std::collections::HashSet;
 
+use crate::config::SprouterConfig;
 use crate::utils::{is_being_deleted, is_seed};
 use crate::{
     grower::{delete_sprouts, grow_sprouts},
     kubernetes::manager::{KubeResourceManager, ResourceManager},
-    sprout::kind::{AsSproutKind, SproutKind, kind_of},
+    sprout::kind::{kind_of, AsSproutKind, SproutKind},
 };
 use anyhow::Result;
 use k8s_openapi::{
-    NamespaceResourceScope,
     api::core::v1::{ConfigMap, Secret},
+    NamespaceResourceScope,
 };
 use kube::ResourceExt;
-use kube::{Api, Client, api::ListParams};
+use kube::{api::ListParams, Api, Client};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
@@ -28,13 +29,15 @@ pub struct Seed {
 
 pub struct SproutManager {
     client: Client,
+    config: SprouterConfig,
     seeds: Arc<RwLock<HashSet<Seed>>>,
 }
 
 impl SproutManager {
-    pub fn new(client: Client) -> Self {
+    pub fn new(client: Client, config: SprouterConfig) -> Self {
         Self {
             client,
+            config,
             seeds: Arc::new(RwLock::new(HashSet::new())),
         }
     }
@@ -101,7 +104,7 @@ impl SproutManager {
             resource_type: kind_of(&resource),
         });
         let mgr = KubeResourceManager::<K>::new(self.client.clone());
-        grow_sprouts(resource.clone(), &mgr).await?;
+        grow_sprouts(resource.clone(), &mgr, &self.config).await?;
         let ns = resource.namespace().unwrap_or_default();
         let name = resource.name_any();
         mgr.add_finalizer(&ns, &name).await?;
@@ -162,6 +165,14 @@ impl SproutManager {
     }
 
     pub async fn new_namespace(&self, namespace: &str) -> Result<()> {
+        if self.config.is_namespace_excluded(namespace) {
+            info!(
+                "Namespace '{}' is excluded, skipping sprout creation",
+                namespace
+            );
+            return Ok(());
+        }
+
         let lock = self.seeds.read().await;
 
         for seed in lock.iter() {

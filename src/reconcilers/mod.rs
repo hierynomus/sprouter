@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod configmap;
-pub mod secret;
 pub mod namespace;
+pub mod secret;
 
 pub use configmap::ConfigMapSeedReconciler;
-pub use secret::SecretSeedReconciler;
 pub use namespace::NamespaceReconciler;
+pub use secret::SecretSeedReconciler;

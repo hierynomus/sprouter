@@ -34,6 +34,16 @@ metadata:
 
 Ensures the resource is automatically present in any new namespace created after.
 
+Namespaces can be excluded from copy targets through the Helm chart:
+
+----
+excludedNamespaces:
+  - kube-system
+  - kube-public
+----
+
+Cleanup still removes Sprouter-managed copies when a seed is deleted.
+
 == 📆 Installation
 
 ----
@@ -75,4 +85,3 @@ sprouter.geeko.me/enabled: "true"
 Apache 2.0
 
 Built with 💚 in Rust, powered by kube-rs.
-

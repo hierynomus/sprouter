@@ -183,7 +183,10 @@ mod tests {
     #[tokio::test]
     async fn reconcile_terminating_seed_calls_delete_seed() {
         let mut lifecycle = MockConfigMapSeedLifecycle::new();
-        lifecycle.expect_delete_seed().times(1).returning(|_| Ok(()));
+        lifecycle
+            .expect_delete_seed()
+            .times(1)
+            .returning(|_| Ok(()));
         lifecycle.expect_add_seed().times(0);
 
         let cm = make_configmap(true, true, true);

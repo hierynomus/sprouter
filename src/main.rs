@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use tracing::info;
 
-use sprouter::reconcilers::{ConfigMapSeedReconciler, SecretSeedReconciler, NamespaceReconciler};
+use sprouter::config::SprouterConfig;
+use sprouter::reconcilers::{ConfigMapSeedReconciler, NamespaceReconciler, SecretSeedReconciler};
 use sprouter::sprout::manager::SproutManager;
 
 #[tokio::main]
@@ -13,9 +14,10 @@ async fn main() -> anyhow::Result<()> {
     info!("Starting the Sprouter controller...");
 
     let client = kube::Client::try_default().await?;
+    let config = SprouterConfig::from_env();
 
     // Initialize the SproutManager
-    let sprout_manager = Arc::new(SproutManager::new(client.clone()));
+    let sprout_manager = Arc::new(SproutManager::new(client.clone(), config));
     sprout_manager.init().await?;
     info!("SproutManager initialized.");
 
