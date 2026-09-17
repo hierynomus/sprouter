@@ -100,7 +100,7 @@ async fn reconcile_with_lifecycle(
     // Check if this is a seed resource
     if !is_seed(meta) {
         debug!(
-            "ConfigMap {}/{} does not have seed annotation, skipping",
+            "ConfigMap {}/{} does not have seed label, skipping",
             namespace, name
         );
         return Ok(Action::await_change());
@@ -144,7 +144,7 @@ mod tests {
         });
 
         if seed {
-            metadata["annotations"] = json!({
+            metadata["labels"] = json!({
                 "sprouter.geeko.me/enabled": "true"
             });
         }
