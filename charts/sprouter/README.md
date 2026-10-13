@@ -1,11 +1,11 @@
 # Sprouter Helm Chart
 
-A Helm chart to deploy **Sprouter**, a Kubernetes operator that propagates annotated `ConfigMaps` and `Secrets` across all namespaces.
+A Helm chart to deploy **Sprouter**, a Kubernetes operator that propagates labeled `ConfigMaps` and `Secrets` across all namespaces.
 
 ## 🧪 Features
 
-- Automatically propagates resources with the annotation `sprouter.geeko.me/enabled: true`
-- Adds a hash annotation to detect changes and prevent unnecessary updates
+- Automatically propagates resources with the label `sprouter.geeko.me/enabled: true`
+- Adds a hash label to detect changes and prevent unnecessary updates
 - Cleans up sprouts when the seed is deleted
 - Propagates to new namespaces as they are created
 
@@ -49,7 +49,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: shared-config
-  annotations:
+  labels:
     sprouter.geeko.me/enabled: "true"
 data:
   key: value

@@ -88,14 +88,16 @@ where
         res.meta_mut().resource_version = None;
         res.meta_mut().uid = None;
 
-        let _ = api.create(&PostParams::default(), &res).await.or_else(|e| {
-            if let kube::Error::Api(err) = &e {
-                if err.code == 409 {
-                    return Ok(res);
+        api.create(&PostParams::default(), &res)
+            .await
+            .or_else(|e| {
+                if let kube::Error::Api(err) = &e {
+                    if err.code == 409 {
+                        return Ok(res);
+                    }
                 }
-            }
-            Err(e)
-        });
+                Err(e)
+            })?;
         Ok(())
     }
 
@@ -113,7 +115,11 @@ where
 
     async fn delete_from_namespace(&self, ns: &str, name: &str) -> Result<()> {
         let api: Api<K> = Api::namespaced(self.client.clone(), ns);
-        let _ = api.delete(name, &Default::default()).await;
+        match api.delete(name, &Default::default()).await {
+            Ok(_) => {}
+            Err(kube::Error::Api(err)) if err.code == 404 => {}
+            Err(err) => return Err(err.into()),
+        }
         Ok(())
     }
 

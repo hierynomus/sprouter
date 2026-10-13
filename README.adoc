@@ -33,6 +33,9 @@ metadata:
 - Deletes all propagated copies if the source is deleted.
 
 Ensures the resource is automatically present in any new namespace created after.
+Only seeds carry Sprouter's deletion finalizer; sprouts do not inherit finalizers from their seed.
+Existing sprouts with an inherited Sprouter finalizer are cleaned up when observed.
+Recreating a namespace with the same name also propagates seeds to the new namespace.
 
 Namespaces can be excluded from copy targets through the Helm chart:
 

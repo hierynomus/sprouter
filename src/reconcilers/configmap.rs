@@ -4,7 +4,7 @@
 //! ConfigMap seed reconciler - watches ConfigMaps and propagates those marked as seeds.
 
 use crate::sprout::manager::SproutManager;
-use crate::utils::{has_finalizer, is_being_deleted, is_seed};
+use crate::utils::{has_finalizer, is_being_deleted, is_seed, is_sprout};
 use async_trait::async_trait;
 use futures::StreamExt;
 use k8s_openapi::api::core::v1::ConfigMap;
@@ -29,6 +29,7 @@ pub enum ConfigMapReconcileError {
 trait ConfigMapSeedLifecycle: Send + Sync {
     async fn add_seed(&self, resource: ConfigMap) -> anyhow::Result<()>;
     async fn delete_seed(&self, resource: ConfigMap) -> anyhow::Result<()>;
+    async fn remove_sprout_finalizer(&self, resource: ConfigMap) -> anyhow::Result<()>;
 }
 
 #[async_trait]
@@ -39,6 +40,10 @@ impl ConfigMapSeedLifecycle for SproutManager {
 
     async fn delete_seed(&self, resource: ConfigMap) -> anyhow::Result<()> {
         SproutManager::delete_seed(self, resource).await
+    }
+
+    async fn remove_sprout_finalizer(&self, resource: ConfigMap) -> anyhow::Result<()> {
+        SproutManager::remove_sprout_finalizer(self, resource).await
     }
 }
 
@@ -86,21 +91,30 @@ async fn reconcile_with_lifecycle(
 ) -> Result<Action, ConfigMapReconcileError> {
     let name = cm.name_any();
     let namespace = cm.namespace().unwrap_or_default();
-    let meta = &(*cm).metadata;
+    let meta = &cm.metadata;
 
     debug!("Reconciling configmap: {}/{}", namespace, name);
 
-    // If being deleted, clean up sprouts and remove finalizer
-    if is_being_deleted(meta) && has_finalizer(meta) {
-        debug!("ConfigMap {}/{} is being deleted", namespace, name);
-        seed_lifecycle.delete_seed((*cm).clone()).await?;
+    if is_sprout(meta) {
+        if has_finalizer(meta) {
+            seed_lifecycle
+                .remove_sprout_finalizer((*cm).clone())
+                .await?;
+        }
         return Ok(Action::await_change());
     }
 
-    // Check if this is a seed resource
+    if is_being_deleted(meta) {
+        if has_finalizer(meta) {
+            debug!("ConfigMap {}/{} is being deleted", namespace, name);
+            seed_lifecycle.delete_seed((*cm).clone()).await?;
+        }
+        return Ok(Action::await_change());
+    }
+
     if !is_seed(meta) {
         debug!(
-            "ConfigMap {}/{} does not have seed annotation, skipping",
+            "ConfigMap {}/{} does not have seed label, skipping",
             namespace, name
         );
         return Ok(Action::await_change());
@@ -137,16 +151,24 @@ mod tests {
     use k8s_openapi::api::core::v1::ConfigMap;
     use serde_json::json;
 
-    fn make_configmap(seed: bool, deleting: bool, with_finalizer: bool) -> Arc<ConfigMap> {
+    fn make_configmap(
+        seed: bool,
+        sprout: bool,
+        deleting: bool,
+        with_finalizer: bool,
+    ) -> Arc<ConfigMap> {
         let mut metadata = json!({
             "name": "seed-cm",
             "namespace": "default"
         });
 
         if seed {
-            metadata["annotations"] = json!({
+            metadata["labels"] = json!({
                 "sprouter.geeko.me/enabled": "true"
             });
+        }
+        if sprout {
+            metadata["labels"]["sprouter.geeko.me/sprout-of"] = json!("source/seed-cm");
         }
 
         if deleting {
@@ -174,7 +196,7 @@ mod tests {
         lifecycle.expect_add_seed().times(1).returning(|_| Ok(()));
         lifecycle.expect_delete_seed().times(0);
 
-        let cm = make_configmap(true, false, false);
+        let cm = make_configmap(true, false, false, false);
         let result = reconcile_with_lifecycle(cm, &lifecycle).await;
 
         assert!(result.is_ok());
@@ -189,7 +211,7 @@ mod tests {
             .returning(|_| Ok(()));
         lifecycle.expect_add_seed().times(0);
 
-        let cm = make_configmap(true, true, true);
+        let cm = make_configmap(true, false, true, true);
         let result = reconcile_with_lifecycle(cm, &lifecycle).await;
 
         assert!(result.is_ok());
@@ -201,9 +223,60 @@ mod tests {
         lifecycle.expect_add_seed().times(0);
         lifecycle.expect_delete_seed().times(0);
 
-        let cm = make_configmap(false, false, false);
+        let cm = make_configmap(false, false, false, false);
         let result = reconcile_with_lifecycle(cm, &lifecycle).await;
 
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn reconcile_terminating_legacy_sprout_removes_finalizer_without_deleting_seed() {
+        let mut lifecycle = MockConfigMapSeedLifecycle::new();
+        lifecycle.expect_add_seed().times(0);
+        lifecycle.expect_delete_seed().times(0);
+        lifecycle
+            .expect_remove_sprout_finalizer()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        let cm = make_configmap(false, true, true, true);
+        assert!(reconcile_with_lifecycle(cm, &lifecycle).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn reconcile_existing_legacy_sprout_removes_finalizer() {
+        let mut lifecycle = MockConfigMapSeedLifecycle::new();
+        lifecycle.expect_add_seed().times(0);
+        lifecycle.expect_delete_seed().times(0);
+        lifecycle
+            .expect_remove_sprout_finalizer()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        let cm = make_configmap(false, true, false, true);
+        assert!(reconcile_with_lifecycle(cm, &lifecycle).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn reconcile_terminating_seed_without_finalizer_does_not_regrow() {
+        let mut lifecycle = MockConfigMapSeedLifecycle::new();
+        lifecycle.expect_add_seed().times(0);
+        lifecycle.expect_delete_seed().times(0);
+
+        let cm = make_configmap(true, false, true, false);
+        assert!(reconcile_with_lifecycle(cm, &lifecycle).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn reconcile_terminating_former_seed_still_cleans_up() {
+        let mut lifecycle = MockConfigMapSeedLifecycle::new();
+        lifecycle.expect_add_seed().times(0);
+        lifecycle
+            .expect_delete_seed()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        let cm = make_configmap(false, false, true, true);
+        assert!(reconcile_with_lifecycle(cm, &lifecycle).await.is_ok());
     }
 }
