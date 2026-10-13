@@ -8,8 +8,8 @@ use sha2::Digest;
 use sha2::Sha256;
 
 pub const LABEL_ENABLED_KEY: &str = "sprouter.geeko.me/enabled";
-const LABEL_SPROUT_KEY: &str = "sprouter.geeko.me/sprout-of";
-const LABEL_SEED_HASH_KEY: &str = "sprouter.geeko.me/seed-hash";
+const SPROUT_OF_KEY: &str = "sprouter.geeko.me/sprout-of";
+const SEED_HASH_KEY: &str = "sprouter.geeko.me/seed-hash";
 pub const FINALIZER_KEY: &str = "sprouter.geeko.me/finalizer";
 
 pub fn is_seed(meta: &ObjectMeta) -> bool {
@@ -23,14 +23,14 @@ pub fn is_seed(meta: &ObjectMeta) -> bool {
 pub fn is_sprout(meta: &ObjectMeta) -> bool {
     meta.labels
         .as_ref()
-        .and_then(|l| l.get(LABEL_SPROUT_KEY))
+        .and_then(|l| l.get(SPROUT_OF_KEY))
         .is_some()
 }
 
 pub fn is_sprout_recent(meta: &ObjectMeta, hash: &Option<String>) -> bool {
-    meta.labels
+    meta.annotations
         .as_ref()
-        .and_then(|l| l.get(LABEL_SEED_HASH_KEY))
+        .and_then(|annotations| annotations.get(SEED_HASH_KEY))
         .map(|v| v == hash.as_deref().unwrap_or_default())
         .unwrap_or(false)
 }
@@ -54,11 +54,16 @@ where
     let val = format!("{}/{}", r.namespace().unwrap_or_default(), r.name_any());
     res.meta_mut().finalizers = None;
     res.labels_mut().remove(LABEL_ENABLED_KEY);
-    res.labels_mut().insert(LABEL_SPROUT_KEY.to_string(), val);
-    hash.as_ref().map(|h| {
-        res.labels_mut()
-            .insert(LABEL_SEED_HASH_KEY.to_string(), h.to_string());
-    });
+    res.labels_mut().remove(SEED_HASH_KEY);
+    res.labels_mut()
+        .insert(SPROUT_OF_KEY.to_string(), "true".to_string());
+    res.annotations_mut().insert(SPROUT_OF_KEY.to_string(), val);
+    if let Some(hash) = hash {
+        res.annotations_mut()
+            .insert(SEED_HASH_KEY.to_string(), hash.clone());
+    } else {
+        res.annotations_mut().remove(SEED_HASH_KEY);
+    }
     res
 }
 
@@ -108,7 +113,7 @@ mod tests {
     fn test_is_sprout_true() {
         let mut cm = ConfigMap::default();
         cm.metadata.labels = Some(BTreeMap::from([(
-            LABEL_SPROUT_KEY.to_string(),
+            SPROUT_OF_KEY.to_string(),
             "true".to_string(),
         )]));
         assert!(is_sprout(cm.meta()));
@@ -123,20 +128,20 @@ mod tests {
     #[test]
     fn test_is_sprout_recent_true() {
         let mut cm = ConfigMap::default();
-        cm.metadata.labels = Some(BTreeMap::from([
-            (LABEL_SPROUT_KEY.to_string(), "true".to_string()),
-            (LABEL_SEED_HASH_KEY.to_string(), "abc123".to_string()),
-        ]));
+        cm.metadata.annotations = Some(BTreeMap::from([(
+            SEED_HASH_KEY.to_string(),
+            "abc123".to_string(),
+        )]));
         assert!(is_sprout_recent(cm.meta(), &Some("abc123".to_string())));
     }
 
     #[test]
     fn test_is_sprout_recent_false_different_hash() {
         let mut cm = ConfigMap::default();
-        cm.metadata.labels = Some(BTreeMap::from([
-            (LABEL_SPROUT_KEY.to_string(), "true".to_string()),
-            (LABEL_SEED_HASH_KEY.to_string(), "abc123".to_string()),
-        ]));
+        cm.metadata.annotations = Some(BTreeMap::from([(
+            SEED_HASH_KEY.to_string(),
+            "abc123".to_string(),
+        )]));
         assert!(!is_sprout_recent(cm.meta(), &Some("xyz456".to_string())));
     }
 
@@ -185,6 +190,58 @@ mod tests {
         assert!(is_sprout(sprout.meta()));
         assert!(!is_seed(sprout.meta()));
         assert!(has_finalizer(secret.meta()));
+    }
+
+    #[test]
+    fn sprout_metadata_uses_valid_labels_and_preserves_source_and_hash() {
+        let mut secret = Secret::default();
+        secret.metadata.name = Some("foo".to_string());
+        secret.metadata.namespace = Some("default".to_string());
+        secret.metadata.labels = Some(BTreeMap::from([(
+            LABEL_ENABLED_KEY.to_string(),
+            "true".to_string(),
+        )]));
+        let hash = "a".repeat(64);
+
+        let sprout = create_sprout(secret, &Some(hash.clone()));
+        let labels = sprout.metadata.labels.as_ref().unwrap();
+        let annotations = sprout.metadata.annotations.as_ref().unwrap();
+        assert_eq!(labels.get(SPROUT_OF_KEY).map(String::as_str), Some("true"));
+        assert!(!labels.contains_key(LABEL_ENABLED_KEY));
+        assert!(!labels.contains_key(SEED_HASH_KEY));
+        assert_eq!(
+            annotations.get(SPROUT_OF_KEY).map(String::as_str),
+            Some("default/foo")
+        );
+        assert_eq!(annotations.get(SEED_HASH_KEY), Some(&hash));
+        assert!(is_sprout_recent(sprout.meta(), &Some(hash)));
+    }
+
+    #[test]
+    fn sprout_without_data_does_not_inherit_seed_hash_annotation() {
+        let mut cm = ConfigMap::default();
+        cm.metadata.labels = Some(BTreeMap::from([(
+            SEED_HASH_KEY.to_string(),
+            "a".repeat(64),
+        )]));
+        cm.metadata.annotations = Some(BTreeMap::from([(
+            SEED_HASH_KEY.to_string(),
+            "stale-hash".to_string(),
+        )]));
+
+        let sprout = create_sprout(cm, &None);
+        assert!(!sprout
+            .metadata
+            .labels
+            .as_ref()
+            .unwrap()
+            .contains_key(SEED_HASH_KEY));
+        assert!(!sprout
+            .metadata
+            .annotations
+            .as_ref()
+            .unwrap()
+            .contains_key(SEED_HASH_KEY));
     }
 
     #[test]

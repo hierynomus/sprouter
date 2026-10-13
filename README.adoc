@@ -18,7 +18,7 @@ Sprouter is ideal for sharing common configuration across teams, environments, o
 
 == 🌿 How It Works
 
-Sprouter watches all ConfigMaps and Secrets.If a resource is labeled with:
+Sprouter watches all ConfigMaps and Secrets. If a resource is labeled with:
 
 ----
 metadata:
@@ -31,6 +31,8 @@ metadata:
 - Copies it to every existing namespace.
 - Re-copies it if the source is updated.
 - Deletes all propagated copies if the source is deleted.
+
+Sprouts carry a `sprouter.geeko.me/sprout-of: "true"` label. Their source (`namespace/name`) and content hash are stored in annotations, since those values are not valid Kubernetes label values.
 
 Ensures the resource is automatically present in any new namespace created after.
 Only seeds carry Sprouter's deletion finalizer; sprouts do not inherit finalizers from their seed.
