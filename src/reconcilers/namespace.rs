@@ -11,7 +11,7 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
 use kube::runtime::{controller::Action, Controller};
 use kube::{Api, Client, ResourceExt};
 use kube_runtime::watcher::Config as WatcherConfig;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
@@ -42,7 +42,7 @@ impl NamespaceLifecycle for SproutManager {
 pub struct NamespaceReconciler {
     client: Client,
     sprout_manager: Arc<dyn NamespaceLifecycle>,
-    seen_namespaces: Mutex<HashSet<String>>,
+    seen_namespaces: Mutex<HashMap<String, String>>,
     started_at: Time,
 }
 
@@ -51,7 +51,7 @@ impl NamespaceReconciler {
         Self {
             client,
             sprout_manager,
-            seen_namespaces: Mutex::new(HashSet::new()),
+            seen_namespaces: Mutex::new(HashMap::new()),
             started_at,
         }
     }
@@ -90,22 +90,25 @@ async fn reconcile(
 async fn reconcile_with_lifecycle(
     ns: Arc<Namespace>,
     namespace_lifecycle: &dyn NamespaceLifecycle,
-    seen_namespaces: &Mutex<HashSet<String>>,
+    seen_namespaces: &Mutex<HashMap<String, String>>,
     started_at: &Time,
 ) -> Result<Action, NamespaceReconcileError> {
     let ns_name = ns.name_any();
+    let uid = ns.uid().ok_or_else(|| {
+        NamespaceReconcileError::Sprouter(anyhow::anyhow!("Namespace '{}' has no UID", ns_name))
+    })?;
 
     debug!("Reconciling namespace: {}", ns_name);
 
     let mut seen = seen_namespaces.lock().await;
-    if seen.contains(&ns_name) {
+    if seen.get(&ns_name) == Some(&uid) {
         debug!("Namespace '{}' already observed, skipping update", ns_name);
         return Ok(Action::await_change());
     }
 
     if ns.metadata.creation_timestamp.as_ref() <= Some(started_at) {
         debug!("Namespace '{}' existed before startup, skipping", ns_name);
-        seen.insert(ns_name);
+        seen.insert(ns_name, uid);
         return Ok(Action::await_change());
     }
 
@@ -113,7 +116,7 @@ async fn reconcile_with_lifecycle(
 
     namespace_lifecycle.new_namespace(&ns_name).await?;
 
-    seen_namespaces.lock().await.insert(ns_name);
+    seen_namespaces.lock().await.insert(ns_name, uid);
 
     Ok(Action::await_change())
 }
@@ -146,17 +149,22 @@ mod tests {
         )
     }
 
-    fn namespace(name: &str, created_at: Time) -> Arc<Namespace> {
+    fn namespace_with_uid(name: &str, uid: &str, created_at: Time) -> Arc<Namespace> {
         let mut namespace = Namespace::default();
         namespace.metadata.name = Some(name.to_string());
+        namespace.metadata.uid = Some(uid.to_string());
         namespace.metadata.creation_timestamp = Some(created_at);
         Arc::new(namespace)
+    }
+
+    fn namespace(name: &str, created_at: Time) -> Arc<Namespace> {
+        namespace_with_uid(name, name, created_at)
     }
 
     #[tokio::test]
     async fn reconcile_new_namespace_created_after_startup_calls_lifecycle_once() {
         let started_at = time("2026-01-01T00:00:00Z");
-        let seen_namespaces = Mutex::new(HashSet::new());
+        let seen_namespaces = Mutex::new(HashMap::new());
         let ns = namespace("new-ns", time("2026-01-01T00:00:01Z"));
         let mut lifecycle = MockNamespaceLifecycle::new();
         lifecycle
@@ -176,7 +184,7 @@ mod tests {
     #[tokio::test]
     async fn reconcile_namespace_created_before_startup_skips_lifecycle() {
         let started_at = time("2026-01-01T00:00:01Z");
-        let seen_namespaces = Mutex::new(HashSet::new());
+        let seen_namespaces = Mutex::new(HashMap::new());
         let ns = namespace("existing-ns", time("2026-01-01T00:00:00Z"));
         let mut lifecycle = MockNamespaceLifecycle::new();
         lifecycle.expect_new_namespace().times(0);
@@ -189,7 +197,7 @@ mod tests {
     #[tokio::test]
     async fn reconcile_failed_new_namespace_is_not_marked_seen() {
         let started_at = time("2026-01-01T00:00:00Z");
-        let seen_namespaces = Mutex::new(HashSet::new());
+        let seen_namespaces = Mutex::new(HashMap::new());
         let ns = namespace("retry-ns", time("2026-01-01T00:00:01Z"));
         let attempts = Arc::new(AtomicUsize::new(0));
         let mut lifecycle = MockNamespaceLifecycle::new();
@@ -209,6 +217,56 @@ mod tests {
                 .is_err()
         );
         reconcile_with_lifecycle(ns, &lifecycle, &seen_namespaces, &started_at)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn reconcile_recreated_namespace_with_same_name_calls_lifecycle_again() {
+        let started_at = time("2026-01-01T00:00:00Z");
+        let seen_namespaces = Mutex::new(HashMap::new());
+        let first = namespace_with_uid("reused", "uid-1", time("2026-01-01T00:00:01Z"));
+        let replacement = namespace_with_uid("reused", "uid-2", time("2026-01-01T00:00:02Z"));
+        let mut lifecycle = MockNamespaceLifecycle::new();
+        lifecycle
+            .expect_new_namespace()
+            .withf(|name| name == "reused")
+            .times(2)
+            .returning(|_| Ok(()));
+
+        reconcile_with_lifecycle(first, &lifecycle, &seen_namespaces, &started_at)
+            .await
+            .unwrap();
+        reconcile_with_lifecycle(
+            replacement.clone(),
+            &lifecycle,
+            &seen_namespaces,
+            &started_at,
+        )
+        .await
+        .unwrap();
+        reconcile_with_lifecycle(replacement, &lifecycle, &seen_namespaces, &started_at)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn reconcile_recreated_preexisting_namespace_calls_lifecycle() {
+        let started_at = time("2026-01-01T00:00:01Z");
+        let seen_namespaces = Mutex::new(HashMap::new());
+        let original = namespace_with_uid("reused", "uid-1", time("2026-01-01T00:00:00Z"));
+        let replacement = namespace_with_uid("reused", "uid-2", time("2026-01-01T00:00:02Z"));
+        let mut lifecycle = MockNamespaceLifecycle::new();
+        lifecycle
+            .expect_new_namespace()
+            .withf(|name| name == "reused")
+            .times(1)
+            .returning(|_| Ok(()));
+
+        reconcile_with_lifecycle(original, &lifecycle, &seen_namespaces, &started_at)
+            .await
+            .unwrap();
+        reconcile_with_lifecycle(replacement, &lifecycle, &seen_namespaces, &started_at)
             .await
             .unwrap();
     }
