@@ -3,7 +3,7 @@ name = "sprouter"
 version = "0.1.0"
 edition = "2021"
 authors = ["Jeroen van Erp <jeroen@geeko.me>"]
-description = "A Kubernetes operator that copies annotated ConfigMaps and Secrets to all namespaces."
+description = "A Kubernetes operator that copies labeled ConfigMaps and Secrets to all namespaces."
 license = "MIT OR Apache-2.0"
 
 [dependencies]

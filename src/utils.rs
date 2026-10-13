@@ -89,7 +89,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_seed_false_missing_annotation() {
+    fn test_is_seed_false_missing_label() {
         let cm = ConfigMap::default();
         assert!(!is_seed(cm.meta()));
     }
@@ -141,7 +141,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_sprout_recent_false_no_annotation() {
+    fn test_is_sprout_recent_false_no_label() {
         let cm = ConfigMap::default();
         assert!(!is_sprout_recent(cm.meta(), &None));
     }

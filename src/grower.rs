@@ -172,7 +172,7 @@ mod tests {
         crate::utils::create_sprout(seed.clone(), &Some("old-hash".to_string()))
     }
 
-    /// A plain ConfigMap with no sprout annotations.
+    /// A plain ConfigMap with no sprout labels.
     fn non_sprout_cm(name: &str, ns: &str) -> ConfigMap {
         let mut cm = ConfigMap::default();
         cm.metadata.name = Some(name.to_string());
@@ -287,7 +287,7 @@ mod tests {
         mock.expect_get_in_namespace()
             .once()
             .returning(move |_, _| Ok(Some(other.clone())));
-        // Resource exists but has no sprout annotation — should not create or update.
+        // Resource exists but has no sprout label — should not create or update.
 
         grow_sprouts(seed, &mock, &config_without_exclusions())
             .await

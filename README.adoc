@@ -1,6 +1,6 @@
 = 🌱 Sprouter
 
-Sprouter is a lightweight Kubernetes operator that automatically propagates annotated ConfigMaps and Secrets to every namespace in the cluster — creating "sprouts" from the original "seed".
+Sprouter is a lightweight Kubernetes operator that automatically propagates labeled ConfigMaps and Secrets to every namespace in the cluster — creating "sprouts" from the original "seed".
 
 Sprouter is ideal for sharing common configuration across teams, environments, or tenants in a multi-namespace setup.
 
@@ -12,17 +12,17 @@ Sprouter is ideal for sharing common configuration across teams, environments, o
 
 🚀 Propagates seeds to new namespaces upon creation
 
-🔍 Uses annotations to control propagation behavior
+🔍 Uses labels to control propagation behavior
 
 ♻️ Only updates when the Seed's data changes using content-based hashing
 
 == 🌿 How It Works
 
-Sprouter watches all ConfigMaps and Secrets.If a resource is annotated with:
+Sprouter watches all ConfigMaps and Secrets.If a resource is labeled with:
 
 ----
 metadata:
-  annotations:
+  labels:
     sprouter.geeko.me/enabled: "true"
 ----
 
@@ -69,9 +69,9 @@ Sprouter requires cluster-wide permissions to:
 - Read all ConfigMaps, Secrets, and Namespaces
 - Write to all namespaces
 
-== 📜 Annotation Format
+== 📜 Label Format
 
-Sprouter only propagates resources annotated with:
+Sprouter only propagates resources labeled with:
 
 ----
 sprouter.geeko.me/enabled: "true"
@@ -79,7 +79,7 @@ sprouter.geeko.me/enabled: "true"
 
 == 🧠 Naming
 
-- Seed: the original annotated ConfigMap or Secret
+- Seed: the original labeled ConfigMap or Secret
 - Sprout: the copies created in each namespace
 - Sprouter: the operator casting those seeds across the cluster
 
