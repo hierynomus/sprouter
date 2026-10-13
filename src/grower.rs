@@ -206,6 +206,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn grow_propagates_create_failure() {
+        let seed = seed_cm("cfg", "src");
+        let mut mock = MockResourceManager::<ConfigMap>::new();
+        mock.expect_list_namespaces()
+            .once()
+            .returning(|| Ok(vec!["src".to_string(), "other".to_string()]));
+        mock.expect_get_in_namespace()
+            .once()
+            .returning(|_, _| Ok(None));
+        mock.expect_create_in_namespace()
+            .once()
+            .returning(|_, _| anyhow::bail!("create failed"));
+
+        assert!(grow_sprouts(seed, &mock, &config_without_exclusions())
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
     async fn grow_skips_source_namespace() {
         let seed = seed_cm("cfg", "src");
         let mut mock = MockResourceManager::<ConfigMap>::new();
@@ -331,6 +350,24 @@ mod tests {
             .returning(|_, _| Ok(()));
 
         delete_sprouts(seed, &mock).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn delete_propagates_delete_failure() {
+        let seed = seed_cm("cfg", "src");
+        let sprout = up_to_date_sprout(&seed);
+        let mut mock = MockResourceManager::<ConfigMap>::new();
+        mock.expect_list_namespaces()
+            .once()
+            .returning(|| Ok(vec!["src".to_string(), "other".to_string()]));
+        mock.expect_get_in_namespace()
+            .once()
+            .returning(move |_, _| Ok(Some(sprout.clone())));
+        mock.expect_delete_from_namespace()
+            .once()
+            .returning(|_, _| anyhow::bail!("delete failed"));
+
+        assert!(delete_sprouts(seed, &mock).await.is_err());
     }
 
     #[tokio::test]

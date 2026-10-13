@@ -164,6 +164,26 @@ impl SproutManager {
         })
     }
 
+    pub async fn remove_sprout_finalizer<K>(&self, resource: K) -> Result<()>
+    where
+        K: kube::Resource<Scope = NamespaceResourceScope>
+            + Clone
+            + serde::de::DeserializeOwned
+            + serde::Serialize
+            + Sync
+            + Send
+            + std::fmt::Debug
+            + 'static,
+        <K as kube::Resource>::DynamicType: Default,
+    {
+        let mgr = KubeResourceManager::<K>::new(self.client.clone());
+        mgr.remove_finalizer(
+            &resource.namespace().unwrap_or_default(),
+            &resource.name_any(),
+        )
+        .await
+    }
+
     fn should_sprout_to_namespace(
         config: &SprouterConfig,
         seed_namespace: &str,

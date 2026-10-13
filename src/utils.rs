@@ -52,6 +52,7 @@ where
 {
     let mut res = r.clone();
     let val = format!("{}/{}", r.namespace().unwrap_or_default(), r.name_any());
+    res.meta_mut().finalizers = None;
     res.labels_mut().remove(LABEL_ENABLED_KEY);
     res.labels_mut().insert(LABEL_SPROUT_KEY.to_string(), val);
     hash.as_ref().map(|h| {
@@ -73,7 +74,7 @@ pub fn hash_seed_data<V: AsRef<[u8]>>(data: &BTreeMap<String, V>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use k8s_openapi::api::core::v1::ConfigMap;
+    use k8s_openapi::api::core::v1::{ConfigMap, Secret};
     use kube::Resource;
     use std::collections::BTreeMap;
 
@@ -163,6 +164,27 @@ mod tests {
         let mut cm = ConfigMap::default();
         cm.metadata.finalizers = Some(vec!["other.io/finalizer".to_string()]);
         assert!(!has_finalizer(cm.meta()));
+    }
+
+    #[test]
+    fn sprouts_do_not_inherit_seed_finalizers() {
+        let mut secret = Secret::default();
+        secret.metadata.name = Some("seed".to_string());
+        secret.metadata.namespace = Some("source".to_string());
+        secret.metadata.finalizers = Some(vec![
+            FINALIZER_KEY.to_string(),
+            "other.example/finalizer".to_string(),
+        ]);
+        secret.metadata.labels = Some(BTreeMap::from([(
+            LABEL_ENABLED_KEY.to_string(),
+            "true".to_string(),
+        )]));
+
+        let sprout = create_sprout(secret.clone(), &None);
+        assert!(sprout.metadata.finalizers.is_none());
+        assert!(is_sprout(sprout.meta()));
+        assert!(!is_seed(sprout.meta()));
+        assert!(has_finalizer(secret.meta()));
     }
 
     #[test]

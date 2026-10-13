@@ -4,7 +4,7 @@
 //! Secret seed reconciler - watches Secrets and propagates those marked as seeds.
 
 use crate::sprout::manager::SproutManager;
-use crate::utils::{has_finalizer, is_being_deleted, is_seed};
+use crate::utils::{has_finalizer, is_being_deleted, is_seed, is_sprout};
 use async_trait::async_trait;
 use futures::StreamExt;
 use k8s_openapi::api::core::v1::Secret;
@@ -29,6 +29,7 @@ pub enum SecretReconcileError {
 trait SecretSeedLifecycle: Send + Sync {
     async fn add_seed(&self, resource: Secret) -> anyhow::Result<()>;
     async fn delete_seed(&self, resource: Secret) -> anyhow::Result<()>;
+    async fn remove_sprout_finalizer(&self, resource: Secret) -> anyhow::Result<()>;
 }
 
 #[async_trait]
@@ -39,6 +40,10 @@ impl SecretSeedLifecycle for SproutManager {
 
     async fn delete_seed(&self, resource: Secret) -> anyhow::Result<()> {
         SproutManager::delete_seed(self, resource).await
+    }
+
+    async fn remove_sprout_finalizer(&self, resource: Secret) -> anyhow::Result<()> {
+        SproutManager::remove_sprout_finalizer(self, resource).await
     }
 }
 
@@ -86,18 +91,27 @@ async fn reconcile_with_lifecycle(
 ) -> Result<Action, SecretReconcileError> {
     let name = secret.name_any();
     let namespace = secret.namespace().unwrap_or_default();
-    let meta = &(*secret).metadata;
+    let meta = &secret.metadata;
 
     debug!("Reconciling secret: {}/{}", namespace, name);
 
-    // If being deleted, clean up sprouts and remove finalizer
-    if is_being_deleted(meta) && has_finalizer(meta) {
-        debug!("Secret {}/{} is being deleted", namespace, name);
-        seed_lifecycle.delete_seed((*secret).clone()).await?;
+    if is_sprout(meta) {
+        if has_finalizer(meta) {
+            seed_lifecycle
+                .remove_sprout_finalizer((*secret).clone())
+                .await?;
+        }
         return Ok(Action::await_change());
     }
 
-    // Check if this is a seed resource
+    if is_being_deleted(meta) {
+        if has_finalizer(meta) {
+            debug!("Secret {}/{} is being deleted", namespace, name);
+            seed_lifecycle.delete_seed((*secret).clone()).await?;
+        }
+        return Ok(Action::await_change());
+    }
+
     if !is_seed(meta) {
         debug!(
             "Secret {}/{} does not have seed label, skipping",
@@ -137,7 +151,7 @@ mod tests {
     use k8s_openapi::api::core::v1::Secret;
     use serde_json::json;
 
-    fn make_secret(seed: bool, deleting: bool, with_finalizer: bool) -> Arc<Secret> {
+    fn make_secret(seed: bool, sprout: bool, deleting: bool, with_finalizer: bool) -> Arc<Secret> {
         let mut metadata = json!({
             "name": "seed-secret",
             "namespace": "default"
@@ -147,6 +161,9 @@ mod tests {
             metadata["labels"] = json!({
                 "sprouter.geeko.me/enabled": "true"
             });
+        }
+        if sprout {
+            metadata["labels"]["sprouter.geeko.me/sprout-of"] = json!("source/seed-secret");
         }
 
         if deleting {
@@ -175,7 +192,7 @@ mod tests {
         lifecycle.expect_add_seed().times(1).returning(|_| Ok(()));
         lifecycle.expect_delete_seed().times(0);
 
-        let secret = make_secret(true, false, false);
+        let secret = make_secret(true, false, false, false);
         let result = reconcile_with_lifecycle(secret, &lifecycle).await;
 
         assert!(result.is_ok());
@@ -190,7 +207,7 @@ mod tests {
             .returning(|_| Ok(()));
         lifecycle.expect_add_seed().times(0);
 
-        let secret = make_secret(true, true, true);
+        let secret = make_secret(true, false, true, true);
         let result = reconcile_with_lifecycle(secret, &lifecycle).await;
 
         assert!(result.is_ok());
@@ -202,9 +219,60 @@ mod tests {
         lifecycle.expect_add_seed().times(0);
         lifecycle.expect_delete_seed().times(0);
 
-        let secret = make_secret(false, false, false);
+        let secret = make_secret(false, false, false, false);
         let result = reconcile_with_lifecycle(secret, &lifecycle).await;
 
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn reconcile_terminating_legacy_sprout_removes_finalizer_without_deleting_seed() {
+        let mut lifecycle = MockSecretSeedLifecycle::new();
+        lifecycle.expect_add_seed().times(0);
+        lifecycle.expect_delete_seed().times(0);
+        lifecycle
+            .expect_remove_sprout_finalizer()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        let secret = make_secret(false, true, true, true);
+        assert!(reconcile_with_lifecycle(secret, &lifecycle).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn reconcile_existing_legacy_sprout_removes_finalizer() {
+        let mut lifecycle = MockSecretSeedLifecycle::new();
+        lifecycle.expect_add_seed().times(0);
+        lifecycle.expect_delete_seed().times(0);
+        lifecycle
+            .expect_remove_sprout_finalizer()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        let secret = make_secret(false, true, false, true);
+        assert!(reconcile_with_lifecycle(secret, &lifecycle).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn reconcile_terminating_seed_without_finalizer_does_not_regrow() {
+        let mut lifecycle = MockSecretSeedLifecycle::new();
+        lifecycle.expect_add_seed().times(0);
+        lifecycle.expect_delete_seed().times(0);
+
+        let secret = make_secret(true, false, true, false);
+        assert!(reconcile_with_lifecycle(secret, &lifecycle).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn reconcile_terminating_former_seed_still_cleans_up() {
+        let mut lifecycle = MockSecretSeedLifecycle::new();
+        lifecycle.expect_add_seed().times(0);
+        lifecycle
+            .expect_delete_seed()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        let secret = make_secret(false, false, true, true);
+        assert!(reconcile_with_lifecycle(secret, &lifecycle).await.is_ok());
     }
 }
